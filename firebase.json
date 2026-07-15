@@ -1,0 +1,30 @@
+{
+  "hosting": {
+    "public": "Builds/WebGL",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "**/*.data.br",
+        "headers": [{ "key": "Content-Encoding", "value": "br" }]
+      },
+      {
+        "source": "**/*.wasm.br",
+        "headers": [
+          { "key": "Content-Encoding", "value": "br" },
+          { "key": "Content-Type", "value": "application/wasm" }
+        ]
+      },
+      {
+        "source": "**/*.js.br",
+        "headers": [
+          { "key": "Content-Encoding", "value": "br" },
+          { "key": "Content-Type", "value": "application/javascript" }
+        ]
+      },
+      {
+        "source": "**/*.symbols.json.br",
+        "headers": [{ "key": "Content-Encoding", "value": "br" }]
+      }
+    ]
+  }
+}

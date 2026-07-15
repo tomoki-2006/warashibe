@@ -46,10 +46,14 @@ namespace Warashibe.Game
         /// flash/reveal (headless/deterministic capture). True in normal play.</summary>
         public static bool AnimateFx = true;
 
-        void Start()
-        {
-            var content = StreamingContentLoader.LoadRoute();
+        // Content loads asynchronously (T-U10) so the same path works on WebGL, where StreamingAssets
+        // is fetched over HTTP. OnContentLoaded runs once the route is parsed + validated.
+        void Start() =>
+            StartCoroutine(StreamingContentLoader.LoadRouteRoutine(
+                StreamingContentLoader.DefaultRouteFolder, OnContentLoaded, OnContentError));
 
+        void OnContentLoaded(LoadedContent content)
+        {
             // Seed a demo state at loc_kibitsu holding only straw — the horsefly is caught in the
             // ambient tap_catch mini-event (T-U09), which then unlocks combine → offer → 演出.
             var save = new SaveData
@@ -89,6 +93,8 @@ namespace Warashibe.Game
             if (_miniEvent != null) { Destroy(_miniEvent); _miniEvent = null; }
             Talk(); // abu now in にもつ — Render's あわせ技 nudge blinks the two combinable slots
         }
+
+        static void OnContentError(Exception e) => Debug.LogError("[EncounterScreen] content load failed: " + e.Message);
 
         // ---- drive methods (buttons + Editor) ----
 
