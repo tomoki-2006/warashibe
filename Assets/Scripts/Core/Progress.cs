@@ -61,6 +61,46 @@ namespace Warashibe.Core
         }
 
         /// <summary>
+        /// Apply a mini-event's completion effects (docs/03 §7): produce <c>gives</c> (tap_catch),
+        /// swap <c>on_complete.replace_item</c> [from,to] (map_choice), and jump to
+        /// <c>on_complete.advance_to</c> (cutscene). Zukan is recorded for produced/upgraded items,
+        /// mirroring <see cref="ApplyOffer"/>. Immutable: a new GameState is returned.
+        /// </summary>
+        public static GameState ApplyEvent(GameState state, Event ev)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (ev == null) throw new ArgumentNullException(nameof(ev));
+            var save = state.Save.Clone();
+
+            if (!string.IsNullOrEmpty(ev.Gives))
+            {
+                if (!save.Inventory.Contains(ev.Gives)) save.Inventory.Add(ev.Gives);
+                if (!save.ZukanItems.Contains(ev.Gives)) save.ZukanItems.Add(ev.Gives);
+            }
+
+            var replace = ev.OnComplete?.ReplaceItem;
+            if (replace != null && replace.Length == 2)
+            {
+                var from = replace[0];
+                var to = replace[1];
+                int idx = save.Inventory.IndexOf(from);
+                if (idx >= 0) save.Inventory[idx] = to;               // in-place swap keeps chain order
+                else if (!save.Inventory.Contains(to)) save.Inventory.Add(to);
+                if (!save.ZukanItems.Contains(to)) save.ZukanItems.Add(to);
+            }
+
+            var advanceTo = ev.OnComplete?.AdvanceTo;
+            if (!string.IsNullOrEmpty(advanceTo))
+            {
+                var stops = state.Content.Route.Stops;
+                int dest = Array.IndexOf(stops, advanceTo);
+                if (dest >= 0) save.StopIndex = dest;                 // unknown loc: ignore (validator guards)
+            }
+
+            return new GameState(save, state.Content);
+        }
+
+        /// <summary>
         /// Advance to the next stop. At the final stop this records route completion
         /// (routeId added to clearedRoutes = RouteClear) instead of moving past the end.
         /// </summary>

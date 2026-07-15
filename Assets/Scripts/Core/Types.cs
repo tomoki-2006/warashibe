@@ -87,20 +87,64 @@ namespace Warashibe.Core
         [JsonProperty("stops")] public string[] Stops { get; set; } // LocationIds in travel order
     }
 
-    // Event content (docs/03 §7). Only the fields the engine/validator needs are mapped;
-    // per-type `spec` details stay in JSON (UI reads them in later tickets).
+    // Mini-event kind (docs/03 §7). Parsed from the JSON "type" string; Unknown for anything
+    // the engine does not implement (keeps forward content additions from throwing).
+    public enum EventKind { Unknown, TapCatch, MapChoice, Cutscene }
+
+    // Event content (docs/03 §7). The full per-type `spec` and success lines are mapped here so
+    // the mini-event player (T-U09) can drive the event straight from content — no Japanese in code.
     public sealed class Event
     {
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("trigger")] public string Trigger { get; set; }           // informational (docs/03 §7)
+        [JsonProperty("spec")] public EventSpec Spec { get; set; }
+        [JsonProperty("lines_on_success")] public string[] LinesOnSuccess { get; set; } // tap_catch
         [JsonProperty("gives")] public string Gives { get; set; }              // item produced (optional)
         [JsonProperty("on_complete")] public EventOnComplete OnComplete { get; set; }
+
+        [JsonIgnore]
+        public EventKind Kind =>
+            Type == "tap_catch" ? EventKind.TapCatch :
+            Type == "map_choice" ? EventKind.MapChoice :
+            Type == "cutscene" ? EventKind.Cutscene :
+            EventKind.Unknown;
+    }
+
+    // Union of the per-type spec fields across all mini-event kinds (docs/03 §7). Only the fields
+    // relevant to an event's Kind are populated; the rest stay at their type defaults.
+    public sealed class EventSpec
+    {
+        // tap_catch (docs/01 §8)
+        [JsonProperty("taps_required")] public int TapsRequired { get; set; }
+        [JsonProperty("hitbox_scale")] public float HitboxScale { get; set; }
+        [JsonProperty("path")] public string Path { get; set; }
+        [JsonProperty("slowdown_per_tap")] public float SlowdownPerTap { get; set; }
+
+        // map_choice
+        [JsonProperty("prompt")] public string Prompt { get; set; }
+        [JsonProperty("choices")] public EventChoice[] Choices { get; set; }
+        [JsonProperty("retry_until_correct")] public bool RetryUntilCorrect { get; set; }
+
+        // cutscene
+        [JsonProperty("duration_ms")] public int DurationMs { get; set; }
+        [JsonProperty("skippable_after_ms")] public int SkippableAfterMs { get; set; }
+        [JsonProperty("visual")] public string Visual { get; set; }
+        [JsonProperty("line")] public string Line { get; set; }
+    }
+
+    public sealed class EventChoice
+    {
+        [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("correct")] public bool Correct { get; set; }
+        [JsonProperty("result")] public string Result { get; set; }
     }
 
     public sealed class EventOnComplete
     {
         [JsonProperty("replace_item")] public string[] ReplaceItem { get; set; } // [from, to]
         [JsonProperty("advance_to")] public string AdvanceTo { get; set; }
+        [JsonProperty("lines")] public string[] Lines { get; set; }              // shown on completion
     }
 
     // ===== Runtime types =====
