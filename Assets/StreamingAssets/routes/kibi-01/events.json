@@ -1,0 +1,33 @@
+[
+  {
+    "id": "ev_abu_catch", "type": "tap_catch",
+    "trigger": "loc_kibitsu入場時から常時（未捕獲の間）",
+    "spec": { "taps_required": 3, "hitbox_scale": 2.0, "path": "figure8_slow",
+              "slowdown_per_tap": 0.35 },
+    "lines_on_success": ["つかまえた！", "『ぶん、っていうんだ。つれてって！』",
+                         "（ぶんが なかまに なった！ いごとの たびに ついてくる）"],
+    "gives": "item_abu"
+  },
+  {
+    "id": "ev_horse_care", "type": "map_choice",
+    "trigger": "item_uma_weak入手直後に自動開始",
+    "spec": { "prompt": "うまに みずを のませよう。どこへ つれていく？",
+              "choices": [
+                { "label": "かわの ほとり", "correct": true,
+                  "result": "うまは ごくごく みずを のみ、ゆっくり やすんだ。" },
+                { "label": "いわばの さか", "correct": false,
+                  "result": "ここには みずが ないみたい。（ぶん『かわは どっちかな？』）" }
+              ],
+              "retry_until_correct": true },
+    "on_complete": { "replace_item": ["item_uma_weak", "item_uma"],
+      "lines": ["うまは げんきに いななきを あげた！", "（よわった馬 → 元気な馬 に かわった！）",
+                "ぶん『てまを かけたら、かちが あがったね！』"] }
+  },
+  {
+    "id": "ev_boat_ride", "type": "cutscene",
+    "spec": { "duration_ms": 3000, "skippable_after_ms": 800,
+              "visual": "ふねで うみを わたる よこスクロール演出",
+              "line": "ぶん『うみの うえは きもちいいねえ！』" },
+    "on_complete": { "advance_to": "loc_shukuba" }
+  }
+]

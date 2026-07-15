@@ -1,0 +1,9 @@
+[
+  { "id": "loc_tanbo",    "name": "吉備の田んぼ",   "region": "岡山", "mapX": 200,  "bg": "bg_tanbo",    "npcIds": ["npc_grandma"] },
+  { "id": "loc_kibitsu",  "name": "吉備津神社の参道", "region": "岡山", "mapX": 700,  "bg": "bg_kibitsu",  "npcIds": ["npc_mother", "npc_child"], "ambientEvent": "ev_abu_catch" },
+  { "id": "loc_touge",    "name": "峠の茶屋",       "region": "岡山", "mapX": 1200, "bg": "bg_touge",    "npcIds": ["npc_merchant"] },
+  { "id": "loc_kurashiki","name": "倉敷の川辺",     "region": "倉敷", "mapX": 1750, "bg": "bg_kurashiki","npcIds": ["npc_musume"] },
+  { "id": "loc_minato",   "name": "瀬戸内の港",     "region": "瀬戸内", "mapX": 2300, "bg": "bg_minato",  "npcIds": ["npc_ryoshi"] },
+  { "id": "loc_shukuba",  "name": "山陽道の宿場",   "region": "山陽道", "mapX": 2850, "bg": "bg_shukuba", "npcIds": ["npc_samurai"] },
+  { "id": "loc_kaido",    "name": "姫路への街道",   "region": "姫路", "mapX": 3400, "bg": "bg_kaido",    "npcIds": ["npc_master"] }
+]

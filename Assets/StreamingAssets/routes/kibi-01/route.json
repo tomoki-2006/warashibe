@@ -1,0 +1,8 @@
+{
+  "id": "route_kibi_01",
+  "title": "吉備の旅",
+  "startItem": "item_wara",
+  "goalItem": "item_yashiki",
+  "stops": ["loc_tanbo", "loc_kibitsu", "loc_touge", "loc_kurashiki",
+            "loc_minato", "loc_shukuba", "loc_kaido"]
+}
