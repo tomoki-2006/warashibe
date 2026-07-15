@@ -2,7 +2,9 @@
     "name": "Warashibe.Game",
     "rootNamespace": "Warashibe.Game",
     "references": [
-        "Warashibe.Core"
+        "Warashibe.Core",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
