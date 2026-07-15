@@ -55,5 +55,17 @@ namespace Warashibe.Game
         /// <summary>Questions used at the current stop (docs/01 §2.3: max 2, no score effect).</summary>
         public int QuestionsUsed => ProgressFor(CurrentLocationId).QuestionsUsed;
         public void UseQuestion() => MutableProgress(CurrentLocationId).QuestionsUsed++;
+
+        // ---- mini-events (docs/03 §7 / docs/01 §7-8) ----
+
+        public bool Has(string itemId) => Save.Inventory.Contains(itemId);
+
+        /// <summary>The current stop's ambient mini-event, or null (docs/03 §7 stops.ambientEvent).</summary>
+        public Event CurrentAmbientEvent =>
+            !string.IsNullOrEmpty(CurrentStop.AmbientEvent)
+            && Content.Events.TryGetValue(CurrentStop.AmbientEvent, out var ev) ? ev : null;
+
+        /// <summary>Apply a mini-event's completion effects through Core (docs/03 §7).</summary>
+        public void ApplyEvent(Event ev) => State = Progress.ApplyEvent(State, ev);
     }
 }
