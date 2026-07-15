@@ -1,0 +1,10 @@
+<!--
+  Managed code stripping is set to High for WebGL (docs/13 §5). Newtonsoft.Json deserializes the
+  StreamingAssets content JSON via reflection, so the high stripper must NOT remove the Core content
+  types it targets, nor Newtonsoft itself. Preserve both. (Warashibe.Game / Editor are reachable
+  from the scene and don't need pinning.)
+-->
+<linker>
+  <assembly fullname="Warashibe.Core" preserve="all"/>
+  <assembly fullname="Newtonsoft.Json" preserve="all"/>
+</linker>

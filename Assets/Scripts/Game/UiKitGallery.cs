@@ -14,9 +14,13 @@ namespace Warashibe.Game
     /// </summary>
     public sealed class UiKitGallery : MonoBehaviour
     {
-        void Start()
+        // Async load (T-U10) so the same path is exercised on WebGL. Build runs after validation.
+        void Start() =>
+            StartCoroutine(StreamingContentLoader.LoadRouteRoutine(StreamingContentLoader.DefaultRouteFolder,
+                Build, e => Debug.LogError("[UiKitGallery] content load failed: " + e.Message)));
+
+        void Build(LoadedContent content)
         {
-            var content = StreamingContentLoader.LoadRoute();
             Debug.Log($"[UiKitGallery] kibi-01 loaded: {content.Stops.Count} stops / {content.Npcs.Count} npcs / {content.Items.Count} items / {content.Recipes.Length} recipe(s)");
 
             var canvas = BuildCanvas();

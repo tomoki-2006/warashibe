@@ -41,10 +41,14 @@ namespace Warashibe.Game
         /// flash/reveal (headless/deterministic capture). True in normal play.</summary>
         public static bool AnimateFx = true;
 
-        void Start()
-        {
-            var content = StreamingContentLoader.LoadRoute();
+        // Content loads asynchronously (T-U10) so the same path works on WebGL, where StreamingAssets
+        // is fetched over HTTP. OnContentLoaded runs once the route is parsed + validated.
+        void Start() =>
+            StartCoroutine(StreamingContentLoader.LoadRouteRoutine(
+                StreamingContentLoader.DefaultRouteFolder, OnContentLoaded, OnContentError));
 
+        void OnContentLoaded(LoadedContent content)
+        {
             // Seed a demo state at loc_kibitsu with straw + horsefly so the player can combine,
             // offer the toy (accept), or offer a wrong item (decline → hint ladder).
             var save = new SaveData
@@ -59,6 +63,8 @@ namespace Warashibe.Game
             BuildCanvas();
             Talk();
         }
+
+        static void OnContentError(Exception e) => Debug.LogError("[EncounterScreen] content load failed: " + e.Message);
 
         // ---- drive methods (buttons + Editor) ----
 
