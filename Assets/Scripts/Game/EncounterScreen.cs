@@ -37,6 +37,11 @@ namespace Warashibe.Game
         bool _cleared;       // this stop has been traded (docs/01 §1 TradeAccept)
         GameObject _meter;   // the built value meter (animated by AcceptFx)
 
+        MiniEventPlayer _miniEvent;                              // ambient mini-event player (T-U09)
+        readonly List<Coroutine> _nudges = new List<Coroutine>(); // active tutorial blinks (docs/01 §7)
+        GameObject _offerBtn;                                    // captured for the こうかん nudge
+        readonly List<GameObject> _combineSlots = new List<GameObject>(); // captured for the あわせ技 nudge
+
         /// <summary>Set false to render the value meter in its final state without the frame-timed
         /// flash/reveal (headless/deterministic capture). True in normal play.</summary>
         public static bool AnimateFx = true;
@@ -45,19 +50,44 @@ namespace Warashibe.Game
         {
             var content = StreamingContentLoader.LoadRoute();
 
-            // Seed a demo state at loc_kibitsu with straw + horsefly so the player can combine,
-            // offer the toy (accept), or offer a wrong item (decline → hint ladder).
+            // Seed a demo state at loc_kibitsu holding only straw — the horsefly is caught in the
+            // ambient tap_catch mini-event (T-U09), which then unlocks combine → offer → 演出.
             var save = new SaveData
             {
                 RouteId = content.Route.Id,
                 StopIndex = 1, // loc_kibitsu
-                Inventory = new List<string> { "item_wara", "item_abu" },
+                Inventory = new List<string> { "item_wara" },
             };
             _session = new GameSession(new GameState(save, content));
             _npcId = "npc_child";
 
+            MiniEventPlayer.AnimateFx = AnimateFx; // keep capture mode in sync (docs/13 headless)
             BuildCanvas();
-            Talk();
+            PlayAmbientOrTalk();
+        }
+
+        /// <summary>Play the current stop's ambient mini-event if its reward is not yet held
+        /// (docs/03 §7 ambientEvent, docs/01 §8 アブ捕獲), otherwise start the conversation.</summary>
+        void PlayAmbientOrTalk()
+        {
+            var ev = _session.CurrentAmbientEvent;
+            bool pending = ev != null && ev.Kind == EventKind.TapCatch
+                           && !string.IsNullOrEmpty(ev.Gives) && !_session.Has(ev.Gives);
+            if (pending)
+            {
+                _miniEvent = gameObject.AddComponent<MiniEventPlayer>();
+                _miniEvent.Play(_session, ev, _overlay.parent, OnAmbientDone);
+            }
+            else
+            {
+                Talk();
+            }
+        }
+
+        void OnAmbientDone()
+        {
+            if (_miniEvent != null) { Destroy(_miniEvent); _miniEvent = null; }
+            Talk(); // abu now in にもつ — Render's あわせ技 nudge blinks the two combinable slots
         }
 
         // ---- drive methods (buttons + Editor) ----
@@ -65,9 +95,16 @@ namespace Warashibe.Game
         public void Talk()
         {
             _dialogue = Npc.Intro?.ToList() ?? new List<string>();
-            _bun = null;
+            _bun = AskNudge();   // しつもん誘導: 初回セリフ後にぶんの一言（docs/01 §7）
             _mode = Mode.Idle;
             Render();
+        }
+
+        // Bun's しつもん nudge string while a question is still available and unused (docs/01 §7).
+        string AskNudge()
+        {
+            bool canAsk = Npc.Questions != null && _usedQuestions.Count == 0 && _session.QuestionsUsed < 2;
+            return canAsk && !_cleared ? Str("tut_ask_bun") : null;
         }
 
         public void Ask()
@@ -143,6 +180,9 @@ namespace Warashibe.Game
 
         void Render()
         {
+            StopNudges();
+            _offerBtn = null;
+            _combineSlots.Clear();
             foreach (Transform c in _column) Destroy(c.gameObject);
             foreach (Transform c in _bunSlot) Destroy(c.gameObject);
 
@@ -162,6 +202,48 @@ namespace Warashibe.Game
             if (!string.IsNullOrEmpty(_bun)) UiKit.BunBubble(_bunSlot, _bun);
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_column);
+            ApplyNudges();
+        }
+
+        // ---- tutorial nudges (docs/01 §7: 状況＋明滅＋ぶんの一言, no text panels) ----
+
+        void StopNudges()
+        {
+            foreach (var c in _nudges) if (c != null) StopCoroutine(c);
+            _nudges.Clear();
+        }
+
+        void ApplyNudges()
+        {
+            if (_cleared || _mode != Mode.Idle) return;
+            if (CanCombine())
+            {
+                // あわせ技: にもつの2枠が明滅（アブ捕獲後）
+                foreach (var slot in _combineSlots)
+                    _nudges.Add(StartCoroutine(TutorialNudge.Blink(slot)));
+            }
+            else if (_offerBtn != null && OfferReady())
+            {
+                // こうかん: おもちゃ完成後、こうかんボタンが明滅
+                _nudges.Add(StartCoroutine(TutorialNudge.Blink(_offerBtn)));
+            }
+        }
+
+        bool OfferReady() => Npc.Accepts != null && Npc.Accepts.Any(a => _session.Has(a.Item));
+
+        // Ids of held items that form an available recipe (blink targets for the あわせ技 nudge).
+        HashSet<string> CombinablePair()
+        {
+            var set = new HashSet<string>();
+            var inv = _session.Save.Inventory;
+            for (int i = 0; i < inv.Count; i++)
+                for (int j = i + 1; j < inv.Count; j++)
+                    if (Recipes.Combine(inv[i], inv[j], _session.Content.Recipes) != null)
+                    {
+                        set.Add(inv[i]);
+                        set.Add(inv[j]);
+                    }
+            return set;
         }
 
         void RenderStairs()
@@ -180,7 +262,7 @@ namespace Warashibe.Game
             bool canAsk = Npc.Questions != null && _usedQuestions.Count < Npc.Questions.Length
                           && _session.QuestionsUsed < 2;
             if (canAsk) Button(row, Str("btn_ask"), ButtonVariant.Ghost, Ask); // hide when spent (docs/01 §2.3)
-            Button(row, Str("btn_offer"), ButtonVariant.Shu, OpenOffer);
+            _offerBtn = Button(row, Str("btn_offer"), ButtonVariant.Shu, OpenOffer);
             if (CanCombine()) Button(row, Str("btn_combine"), ButtonVariant.Ghost, TryCombine);
         }
 
@@ -202,21 +284,24 @@ namespace Warashibe.Game
             UiKit.Text(_column, Str("btn_bag"), DesignTokens.FsSmall, DesignTokens.Disabled,
                 TextAlignmentOptions.Left, "InvLabel");
 
+            var combinable = CombinablePair();
             var row = Row("Inventory");
             foreach (var id in _session.Save.Inventory)
             {
                 var item = _session.Content.Items[id];
                 string label = item.Emoji + " " + item.NameRuby;
                 bool offered = prog.OfferedItems.Contains(id);
+                GameObject slot;
                 if (_mode == Mode.Offering)
                 {
                     string capture = id;
-                    Button(row, label, offered ? ButtonVariant.Ghost : ButtonVariant.Ai,
+                    slot = Button(row, label, offered ? ButtonVariant.Ghost : ButtonVariant.Ai,
                         () => Offer(capture), disabled: offered);
                 }
                 else
                 {
-                    Button(row, label, ButtonVariant.Ghost, null, disabled: true);
+                    slot = Button(row, label, ButtonVariant.Ghost, null, disabled: true);
+                    if (combinable.Contains(id)) _combineSlots.Add(slot); // あわせ技 blink target
                 }
             }
         }
@@ -246,11 +331,12 @@ namespace Warashibe.Game
             return go.transform;
         }
 
-        void Button(Transform parent, string label, ButtonVariant v, Action onClick, bool disabled = false)
+        GameObject Button(Transform parent, string label, ButtonVariant v, Action onClick, bool disabled = false)
         {
             var go = UiKit.ManjuButton(parent, label, v, disabled);
             if (!disabled && onClick != null)
                 go.GetComponent<Button>().onClick.AddListener(() => onClick());
+            return go;
         }
 
         void BuildCanvas()
@@ -313,6 +399,46 @@ namespace Warashibe.Game
             ovV.childForceExpandWidth = true;
             ovV.childAlignment = TextAnchor.MiddleCenter;
             _overlay = ov.transform;
+
+            if (Application.isEditor) BuildDebugStrip(canvas.transform);
+        }
+
+        // ---- editor-only review harness (T-U09) ----
+        // The three mini-events fire from content triggers: tap_catch is the loc_kibitsu ambient
+        // (played on start); horse-care fires on gaining item_uma_weak and boat fires on advancing to
+        // loc_shukuba — neither is reachable until the route walker exists. This top strip lets a
+        // reviewer replay each event now. Editor-only: it never appears in a shipped build.
+
+        void BuildDebugStrip(Transform canvas)
+        {
+            var go = new GameObject("DebugEvents", typeof(RectTransform));
+            go.transform.SetParent(canvas, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0.5f, 1f);
+            rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, -DesignTokens.Sp1);
+            var h = go.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = DesignTokens.Sp1;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = false;
+            h.childAlignment = TextAnchor.MiddleCenter;
+            go.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            Button(go.transform, "🪰", ButtonVariant.Ghost, () => PlayEvent("ev_abu_catch"));
+            Button(go.transform, "🐴", ButtonVariant.Ghost, () => PlayEvent("ev_horse_care"));
+            Button(go.transform, "🛶", ButtonVariant.Ghost, () => PlayEvent("ev_boat_ride"));
+        }
+
+        /// <summary>Play a content event by id (ambient wiring + editor review). Public so the
+        /// Editor / MCP can drive each mini-event deterministically for capture.</summary>
+        public MiniEventPlayer PlayEvent(string eventId)
+        {
+            if (_miniEvent != null) return _miniEvent; // one at a time
+            if (!_session.Content.Events.TryGetValue(eventId, out var ev)) return null;
+            _miniEvent = gameObject.AddComponent<MiniEventPlayer>();
+            _miniEvent.Play(_session, ev, _overlay.parent, OnAmbientDone);
+            return _miniEvent;
         }
 
         static void Stretch(RectTransform rt)
