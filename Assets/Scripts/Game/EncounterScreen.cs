@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -32,6 +33,13 @@ namespace Warashibe.Game
 
         Transform _column;   // rebuilt each Render
         Transform _bunSlot;  // bottom-right overlay
+        Transform _overlay;  // centre overlay for the value-meter 演出
+        bool _cleared;       // this stop has been traded (docs/01 §1 TradeAccept)
+        GameObject _meter;   // the built value meter (animated by AcceptFx)
+
+        /// <summary>Set false to render the value meter in its final state without the frame-timed
+        /// flash/reveal (headless/deterministic capture). True in normal play.</summary>
+        public static bool AnimateFx = true;
 
         void Start()
         {
@@ -94,7 +102,11 @@ namespace Warashibe.Game
                     _dialogue = result.Lines;
                     _bun = null;
                     _mode = Mode.Idle;
-                    break;
+                    _cleared = true;
+                    Render();
+                    BuildMeter(itemId);               // final state built synchronously (docs/04 §S6)
+                    if (AnimateFx) StartCoroutine(AcceptFx()); // flash + star reveal (docs/04 §4)
+                    return;
                 case OfferOutcome.Decline:
                     _dialogue = result.Lines;                    // L{n} decline line
                     _bun = result.HintLevelShown >= 3 ? Npc.HintL3
@@ -136,14 +148,29 @@ namespace Warashibe.Game
 
             UiKit.DialogueBox(_column, Npc.Name, _dialogue);
 
-            if (_mode == Mode.Questioning) RenderQuestions();
-            else RenderActions();
-
-            RenderInventory();
+            if (_cleared)
+            {
+                RenderStairs(); // value stairs — the visible score proxy (docs/04 §S2)
+            }
+            else
+            {
+                if (_mode == Mode.Questioning) RenderQuestions();
+                else RenderActions();
+                RenderInventory();
+            }
 
             if (!string.IsNullOrEmpty(_bun)) UiKit.BunBubble(_bunSlot, _bun);
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_column);
+        }
+
+        void RenderStairs()
+        {
+            var owned = new List<string>();
+            foreach (var id in new[] { "item_wara", "item_abumushi_toy", "item_kibidango" })
+                if (_session.Content.Items.TryGetValue(id, out var it)) owned.Add(it.Emoji);
+            string goal = _session.Content.Items.TryGetValue(_session.Content.Route.GoalItem, out var g) ? g.Emoji : "🏠";
+            UiKit.StairProgress(_column, owned, 7, goal);
         }
 
         void RenderActions()
@@ -275,6 +302,17 @@ namespace Warashibe.Game
             bunV.childForceExpandWidth = false;
             bunV.childAlignment = TextAnchor.LowerRight;
             _bunSlot = bun.transform;
+
+            var ov = new GameObject("Overlay", typeof(RectTransform));
+            ov.transform.SetParent(canvas.transform, false);
+            var ovRt = (RectTransform)ov.transform;
+            ovRt.anchorMin = ovRt.anchorMax = ovRt.pivot = new Vector2(0.5f, 0.5f);
+            ovRt.sizeDelta = new Vector2(360f, 0f);
+            var ovV = ov.AddComponent<VerticalLayoutGroup>();
+            ovV.childControlWidth = ovV.childControlHeight = true;
+            ovV.childForceExpandWidth = true;
+            ovV.childAlignment = TextAnchor.MiddleCenter;
+            _overlay = ov.transform;
         }
 
         static void Stretch(RectTransform rt)
@@ -282,6 +320,74 @@ namespace Warashibe.Game
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
             rt.offsetMin = rt.offsetMax = Vector2.zero;
+        }
+
+        // ---- success 演出 (docs/01 §1 TradeAccept → ValueMeter; docs/04 §4 numbers) ----
+
+        void BuildMeter(string offeredId)
+        {
+            var item = _session.Content.Items[offeredId];
+            var rule = Npc.Accepts.First(a => a.Item == offeredId);
+            _meter = UiKit.ValueMeter(_overlay, item.Emoji, item.NameRuby,
+                item.BaseValue, rule.ValueForNpc, rule.ReasonLine, Str("meter_mine"), Str("meter_theirs"));
+
+            // 5th "their" star flashes shu (docs/04 §4). Set synchronously so it shows in the final state.
+            var stars = TheirStars();
+            if (rule.ValueForNpc >= 5 && stars.Count == 5) stars[4].color = DesignTokens.Shu;
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_overlay);
+
+            // Score wired here; per docs/01 §4 per-stop deductions stay off-screen (stairs are the
+            // visible proxy, final rank shows at RouteClear). Logged for development.
+            var prog = _session.ProgressFor(_session.CurrentLocationId);
+            int stopScore = Score.StopScore(prog);
+            Debug.Log($"[Score] {_session.CurrentLocationId}: stopScore={stopScore} rank={Score.RankFor(stopScore)}");
+        }
+
+        List<TextMeshProUGUI> TheirStars() =>
+            _meter == null ? new List<TextMeshProUGUI>()
+            : _meter.GetComponentsInChildren<TextMeshProUGUI>(true).Where(x => x.name == "TheirStar").ToList();
+
+        IEnumerator AcceptFx()
+        {
+            // Success flash (docs/04 §4: 300ms white overlay .6 → 0).
+            var flash = UiKit.FullscreenFlash(_overlay.parent, new Color(1f, 1f, 1f, 0.6f));
+            for (float t = 0f; t < DesignTokens.DurSuccessFlash; t += Time.deltaTime)
+            {
+                flash.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.6f, 0f, t / DesignTokens.DurSuccessFlash));
+                yield return null;
+            }
+            Destroy(flash.gameObject);
+
+            // Reveal "their" stars left→right (150ms, spring pop + 180° spin — docs/04 §4).
+            var stars = TheirStars();
+            foreach (var s in stars) s.rectTransform.localScale = Vector3.zero;
+            for (int i = 0; i < stars.Count; i++)
+            {
+                yield return new WaitForSeconds(0.15f);
+                yield return PopIn(stars[i].rectTransform);
+            }
+        }
+
+        static IEnumerator PopIn(RectTransform rt)
+        {
+            float d = DesignTokens.DurStarAppear;
+            for (float t = 0f; t < d; t += Time.deltaTime)
+            {
+                float p = t / d;
+                float s = BackOut(p);
+                rt.localScale = new Vector3(s, s, 1f);
+                rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(180f, 0f, p)); // 回転180°
+                yield return null;
+            }
+            rt.localScale = Vector3.one;
+            rt.localRotation = Quaternion.identity;
+        }
+
+        static float BackOut(float p)
+        {
+            const float c1 = 1.70158f, c3 = c1 + 1f;
+            float x = p - 1f;
+            return 1f + c3 * x * x * x + c1 * x * x;
         }
     }
 }

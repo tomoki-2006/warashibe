@@ -212,5 +212,56 @@ namespace Warashibe.Game
             Text(bubble.transform, text, DesignTokens.FsSmall, DesignTokens.Ink, TextAlignmentOptions.Left, "Say");
             return bubble;
         }
+
+        /// <summary>
+        /// Value meter shown on a successful trade (docs/04 §S6): the offered item, your ★ (baseValue),
+        /// their ★ (valueForNpc), and the reason. "Their" stars are named "TheirStar" so the caller
+        /// can reveal them one by one and flash the 5th (docs/04 §4).
+        /// </summary>
+        public static GameObject ValueMeter(Transform parent, string emoji, string title,
+            int mine, int theirs, string reason, string mineLabel, string theirsLabel)
+        {
+            var panel = Panel(parent, DesignTokens.White, (int)DesignTokens.Radius, "ValueMeter").gameObject;
+            var v = panel.AddComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset((int)DesignTokens.Sp3, (int)DesignTokens.Sp3, (int)DesignTokens.Sp3, (int)DesignTokens.Sp3);
+            v.spacing = DesignTokens.Sp2;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childAlignment = TextAnchor.MiddleCenter;
+            panel.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            Text(panel.transform, emoji + "  " + title, DesignTokens.FsSerifName, DesignTokens.Ink, TextAlignmentOptions.Center, "Header");
+            StarRow(panel.transform, mineLabel, mine, "MineStar");
+            StarRow(panel.transform, theirsLabel, theirs, "TheirStar");
+            Text(panel.transform, reason, DesignTokens.FsBody, DesignTokens.Shu, TextAlignmentOptions.Center, "Reason");
+            return panel;
+        }
+
+        static void StarRow(Transform parent, string label, int filled, string starName)
+        {
+            var row = NewRect("StarRow", parent);
+            var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = 6f;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = false;
+            h.childAlignment = TextAnchor.MiddleCenter;
+            Text(row, label, DesignTokens.FsBody, DesignTokens.Ink, TextAlignmentOptions.Left, "Label");
+            for (int i = 0; i < 5; i++)
+                Text(row, i < filled ? "★" : "☆", DesignTokens.FsSerifName,
+                    i < filled ? DesignTokens.Gold : DesignTokens.Disabled, TextAlignmentOptions.Center, starName);
+        }
+
+        /// <summary>Full-screen overlay used for the success flash (docs/04 §4).</summary>
+        public static Image FullscreenFlash(Transform parent, Color color)
+        {
+            var rt = NewRect("Flash", parent);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            var img = rt.gameObject.AddComponent<Image>();
+            img.color = color;
+            img.raycastTarget = false;
+            return img;
+        }
     }
 }
