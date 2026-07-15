@@ -87,12 +87,61 @@ namespace Warashibe.Core
         [JsonProperty("stops")] public string[] Stops { get; set; } // LocationIds in travel order
     }
 
+    // Event content (docs/03 §7). Only the fields the engine/validator needs are mapped;
+    // per-type `spec` details stay in JSON (UI reads them in later tickets).
+    public sealed class Event
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("gives")] public string Gives { get; set; }              // item produced (optional)
+        [JsonProperty("on_complete")] public EventOnComplete OnComplete { get; set; }
+    }
+
+    public sealed class EventOnComplete
+    {
+        [JsonProperty("replace_item")] public string[] ReplaceItem { get; set; } // [from, to]
+        [JsonProperty("advance_to")] public string AdvanceTo { get; set; }
+    }
+
     // ===== Runtime types =====
 
     public enum OfferOutcome { Accept, Decline, Duplicate }
 
     // routeRank() range: docs/02 §3 returns "choja"|"daishonin"|"gyoshonin"|"minarai".
     public enum RouteRank { Choja, Daishonin, Gyoshonin, Minarai }
+
+    // Validation (docs/03 §9-10 + docs/02 §3 validateRoute). One code per failure kind.
+    public enum ValidationCode
+    {
+        StopMissing,        // 1: route.stops references an unknown location
+        GoalUnreachable,    // 2: startItem cannot reach goalItem via recipes/accepts/events
+        ValueNotAboveBase,  // 3: AcceptRule.valueForNpc <= offered item's baseValue
+        NpcShape,           // 4: declineLines != 3, questions > 2, or empty hintL2/L3 (trading NPC)
+        RefMissing,         // 5: referenced item/npc/event id does not exist
+        TextTooLong,        // 6: a sentence exceeds the kana/kanji length limit
+        RubyMissing,        // 6: dialogue kanji outside the approved (ruby-free) set
+        KatakanaNotAllowed, // 6: katakana word outside the allow-list
+        FuriganaMissing,    // 6: item name has kanji but name_ruby is empty
+        HighlightMissing,   // 7: highlightTarget is neither an item nor an event
+        ChainNotMonotonic,  // 8: a non-postEvent trade lowers the value stairs
+        ObservableMissing,  // 9: observable target is empty
+    }
+
+    public sealed class ValidationError
+    {
+        public ValidationCode Code { get; }
+        public string Where { get; }   // id / context the problem is anchored to
+        public string Message { get; }
+
+        public ValidationError(ValidationCode code, string where, string message)
+        {
+            Code = code;
+            Where = where;
+            Message = message;
+        }
+
+        public override string ToString() => "[" + Code + "] " + Where + ": " + Message;
+    }
 
     public sealed class ValueMeter
     {
@@ -179,6 +228,8 @@ namespace Warashibe.Core
         public Dictionary<string, Stop> Stops { get; set; } = new Dictionary<string, Stop>();
         public Dictionary<string, Npc> Npcs { get; set; } = new Dictionary<string, Npc>();
         public Dictionary<string, Item> Items { get; set; } = new Dictionary<string, Item>();
+        public Dictionary<string, Event> Events { get; set; } = new Dictionary<string, Event>();
+        public Dictionary<string, string> Strings { get; set; } = new Dictionary<string, string>();
         public Recipe[] Recipes { get; set; } = new Recipe[0];
     }
 

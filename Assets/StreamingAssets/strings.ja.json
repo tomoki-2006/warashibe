@@ -1,0 +1,15 @@
+{
+  "btn_start": "はじめる", "btn_continue": "つづきから",
+  "btn_talk": "はなす", "btn_ask": "しつもん", "btn_offer": "こうかん", "btn_bag": "にもつ",
+  "btn_combine": "くみあわせる", "btn_map": "ちず", "btn_replay": "もういちど", "btn_share": "みんなにみせる",
+  "offer_prompt": "なにを さしだす？",
+  "offer_dup_bun": "それは さっき みせたよ",
+  "combine_fail_bun": "うーん、なにも おきないみたい",
+  "meter_mine": "あなたにとって", "meter_theirs": "あいてにとって",
+  "clear_title": "たびの おわり",
+  "rank_choja": "ちょうじゃ", "rank_daishonin": "おおあきんど",
+  "rank_gyoshonin": "ぎょうしょうにん", "rank_minarai": "みならい",
+  "save_broken": "たびの きろくが みつからなかったので、はじめから はじめるよ",
+  "error_title": "おや、みちに まよったようだ", "error_btn": "はじめの まちへ もどる",
+  "nudge_bun": "ぶんぶん…… よく みてみよ？"
+}
