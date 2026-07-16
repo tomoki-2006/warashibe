@@ -1,0 +1,52 @@
+name: CI
+
+# PR gate (docs/13 §6): run the EditMode tests on every PR + push to main.
+# Warashibe.Core.Tests covers both the engine matrix (docs/06 §2) and content validation
+# (ValidateTests.Kibi01_LoadsAndValidates_WithZeroErrors = docs/03 §9 in-editor), so a green
+# run here IS the "Coreテスト＋コンテンツ検証" gate. The heavy WebGL build stays nightly.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: EditMode tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-test-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-test-
+            Library-
+
+      - name: Run EditMode tests
+        uses: game-ci/unity-test-runner@v4
+        id: tests
+        env:
+          # One of these must be set in repo Secrets (see docs/CI_SETUP.md).
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: EditMode test results
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: EditMode-test-results
+          path: ${{ steps.tests.outputs.artifactsPath }}
