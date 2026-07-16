@@ -1,0 +1,50 @@
+name: Nightly WebGL build
+
+# Unity builds are heavy → NOT a PR gate; run nightly (docs/13 §6). The build respects the
+# committed WebGL PlayerSettings (Brotli / High managed stripping / engine strip, set in T-U10)
+# and Assets/link.xml (preserves Newtonsoft/Core under High stripping). Manual runs via the
+# "Run workflow" button. The produced build is uploaded as an artifact; Firebase deploy stays a
+# manual PO step (docs/DEPLOY_WEBGL.md).
+on:
+  schedule:
+    - cron: '0 18 * * *' # nightly, UTC
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-webgl
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: WebGL build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-webgl-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-webgl-
+            Library-
+
+      - name: Build WebGL
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: WebGL
+          buildName: WebGL
+          buildsPath: Builds
+
+      - name: Upload WebGL build
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebGL-Build
+          path: Builds/WebGL
+          if-no-files-found: error
