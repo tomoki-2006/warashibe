@@ -52,6 +52,7 @@ namespace Warashibe.Game
             _session = new GameSession(new GameState(save, _content));
             _cleared.Clear();
             _current = 0;
+            AudioManager.Instance.Unlock(); // first tap = はじめる → satisfy the WebGL autoplay policy (docs/04 §5)
             ShowMap();
         }
 
@@ -68,6 +69,7 @@ namespace Warashibe.Game
 
         void ShowMap()
         {
+            AudioManager.Instance.PlayBgm("bgm_michi"); // 道中 (docs/04 §5)
             var go = new GameObject("MapScreen");
             Swap(go);
             go.AddComponent<MapScreen>().Begin(_session, ReachableMax(), _current, EnterStop);
@@ -77,6 +79,7 @@ namespace Warashibe.Game
         {
             _current = index;
             _session.Save.StopIndex = index; // the encounter reads CurrentLocationId / progress from this
+            AudioManager.Instance.PlayBgm("bgm_ichi"); // 出会い/市 (docs/04 §5)
             var stop = _content.Stops[_content.Route.Stops[index]];
             var npcId = _session.PrimaryNpcId(stop);
             var go = new GameObject("EncounterScreen");
