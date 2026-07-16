@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 
 namespace Warashibe.Game
@@ -249,6 +251,45 @@ namespace Warashibe.Game
             for (int i = 0; i < 5; i++)
                 Text(row, i < filled ? "★" : "☆", DesignTokens.FsSerifName,
                     i < filled ? DesignTokens.Gold : DesignTokens.Disabled, TextAlignmentOptions.Center, starName);
+        }
+
+        // ---- screen scaffolding (T-U12: one screen-space canvas per flow screen) ----
+
+        /// <summary>Create a ScreenSpaceOverlay canvas at the 390×844 reference (docs/04 §2) and make
+        /// sure an EventSystem exists (new Input System module). Returns the canvas.</summary>
+        public static Canvas ScreenCanvas(string name)
+        {
+            EnsureEventSystem();
+            var go = new GameObject(name, typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = go.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(390f, 844f);
+            scaler.matchWidthOrHeight = 0.5f;
+            return canvas;
+        }
+
+        public static void EnsureEventSystem()
+        {
+            if (Object.FindAnyObjectByType<EventSystem>() == null)
+            {
+                var es = new GameObject("EventSystem", typeof(EventSystem));
+                es.AddComponent<InputSystemUIInputModule>();
+            }
+        }
+
+        /// <summary>Full-bleed background fill (non-interactive).</summary>
+        public static Image FullscreenBg(Transform parent, Color color)
+        {
+            var rt = NewRect("Bg", parent);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            var img = rt.gameObject.AddComponent<Image>();
+            img.color = color;
+            img.raycastTarget = false;
+            return img;
         }
 
         /// <summary>Full-screen overlay used for the success flash (docs/04 §4).</summary>

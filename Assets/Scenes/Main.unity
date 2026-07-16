@@ -258,7 +258,7 @@ GameObject:
   - component: {fileID: 2069696422}
   - component: {fileID: 2069696423}
   m_Layer: 0
-  m_Name: Bootstrap
+  m_Name: GameFlow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -288,9 +288,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 2069696420}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1415f94e2e5c44d3b0c21104eaab272, type: 3}
+  m_Script: {fileID: 11500000, guid: 0946a22185568473db84def1b9636842, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Warashibe.Game::Warashibe.Game.EncounterScreen
+  m_EditorClassIdentifier: Warashibe.Game::Warashibe.Game.GameFlow
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

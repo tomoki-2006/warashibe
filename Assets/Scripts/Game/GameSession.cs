@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Warashibe.Core;
 
 namespace Warashibe.Game
@@ -67,5 +68,70 @@ namespace Warashibe.Game
 
         /// <summary>Apply a mini-event's completion effects through Core (docs/03 §7).</summary>
         public void ApplyEvent(Event ev) => State = Progress.ApplyEvent(State, ev);
+
+        // ---- route walking / value stairs (T-U12, docs/01 §6 / §5, docs/04 §S2) ----
+
+        /// <summary>The stop's trading NPC (first with a non-empty accepts), or null.</summary>
+        public Npc TradingNpc(Stop stop)
+        {
+            if (stop?.NpcIds == null) return null;
+            foreach (var id in stop.NpcIds)
+                if (Content.Npcs.TryGetValue(id, out var npc) && npc.Accepts != null && npc.Accepts.Length > 0)
+                    return npc;
+            return null;
+        }
+
+        /// <summary>The NPC to converse with at a stop: its trading NPC if any, else the first one.</summary>
+        public string PrimaryNpcId(Stop stop)
+        {
+            var trading = TradingNpc(stop);
+            if (trading != null) return trading.Id;
+            return stop?.NpcIds != null && stop.NpcIds.Length > 0 ? stop.NpcIds[0] : null;
+        }
+
+        public bool IsStopCleared(string locId) =>
+            Save.Progress.TryGetValue(locId, out var p) && p.Cleared;
+
+        /// <summary>Value-stairs chain (docs/04 §S2): start item + each <b>cleared</b> trading stop's
+        /// reward, in route order. The goal item is shown separately (see <see cref="ChainTotalSteps"/>).</summary>
+        public List<string> ChainEmojisOwned()
+        {
+            var owned = new List<string>();
+            if (Content.Items.TryGetValue(Content.Route.StartItem, out var start)) owned.Add(start.Emoji);
+            foreach (var locId in Content.Route.Stops)
+            {
+                if (!IsStopCleared(locId)) continue;
+                var npc = TradingNpc(Content.Stops[locId]);
+                if (npc == null) continue;
+                var gives = npc.Accepts[0].Gives;
+                if (gives == Content.Route.GoalItem) continue; // goal has its own slot
+                if (Content.Items.TryGetValue(gives, out var g)) owned.Add(g.Emoji);
+            }
+            return owned;
+        }
+
+        /// <summary>Total non-goal stair steps: start item + every trading stop whose reward isn't the goal.</summary>
+        public int ChainTotalSteps()
+        {
+            int steps = 1; // start item
+            foreach (var locId in Content.Route.Stops)
+            {
+                var npc = TradingNpc(Content.Stops[locId]);
+                if (npc != null && npc.Accepts[0].Gives != Content.Route.GoalItem) steps++;
+            }
+            return steps;
+        }
+
+        /// <summary>Trip total over cleared stops (docs/01 §4). Observation bonus is 0 until observed
+        /// tracking lands.</summary>
+        public int TripScore()
+        {
+            var stopScores = new List<int>();
+            foreach (var locId in Content.Route.Stops)
+                if (IsStopCleared(locId)) stopScores.Add(Score.StopScore(ProgressFor(locId)));
+            return Score.TripScore(stopScores, 0);
+        }
+
+        public RouteRank Rank() => Score.RankFor(TripScore());
     }
 }

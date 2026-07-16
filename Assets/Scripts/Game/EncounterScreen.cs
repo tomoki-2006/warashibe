@@ -46,25 +46,17 @@ namespace Warashibe.Game
         /// flash/reveal (headless/deterministic capture). True in normal play.</summary>
         public static bool AnimateFx = true;
 
-        // Content loads asynchronously (T-U10) so the same path works on WebGL, where StreamingAssets
-        // is fetched over HTTP. OnContentLoaded runs once the route is parsed + validated.
-        void Start() =>
-            StartCoroutine(StreamingContentLoader.LoadRouteRoutine(
-                StreamingContentLoader.DefaultRouteFolder, OnContentLoaded, OnContentError));
+        Action _onCleared;   // GameFlow unlocks the next stop when the player leaves a finished stop (T-U12)
 
-        void OnContentLoaded(LoadedContent content)
+        /// <summary>GameFlow entry (T-U12): run this stop's encounter for <paramref name="npcId"/>
+        /// on the already-loaded <paramref name="session"/>. <paramref name="onCleared"/> fires when
+        /// the player leaves a finished stop (a completed trade, or a non-trading stop after its
+        /// intro) so the flow can unlock the next stop / show the result.</summary>
+        public void Begin(GameSession session, string npcId, Action onCleared)
         {
-            // Seed a demo state at loc_kibitsu holding only straw — the horsefly is caught in the
-            // ambient tap_catch mini-event (T-U09), which then unlocks combine → offer → 演出.
-            var save = new SaveData
-            {
-                RouteId = content.Route.Id,
-                StopIndex = 1, // loc_kibitsu
-                Inventory = new List<string> { "item_wara" },
-            };
-            _session = new GameSession(new GameState(save, content));
-            _npcId = "npc_child";
-
+            _session = session;
+            _npcId = npcId;
+            _onCleared = onCleared;
             MiniEventPlayer.AnimateFx = AnimateFx; // keep capture mode in sync (docs/13 headless)
             BuildCanvas();
             PlayAmbientOrTalk();
@@ -94,7 +86,27 @@ namespace Warashibe.Game
             Talk(); // abu now in にもつ — Render's あわせ技 nudge blinks the two combinable slots
         }
 
-        static void OnContentError(Exception e) => Debug.LogError("[EncounterScreen] content load failed: " + e.Message);
+        // Play the accept's postEvent after the 演出 (docs/03 §7: 馬の世話 / 舟). T-U12 wires these
+        // in-context so they fire on the real route (previously only reachable via the debug strip).
+        IEnumerator AcceptThenPost(AcceptRule rule)
+        {
+            yield return AcceptFx();
+            PlayPostEvent(rule);
+        }
+
+        void PlayPostEvent(AcceptRule rule)
+        {
+            if (rule == null || string.IsNullOrEmpty(rule.PostEvent) || _miniEvent != null) return;
+            if (!_session.Content.Events.TryGetValue(rule.PostEvent, out var ev)) return;
+            _miniEvent = gameObject.AddComponent<MiniEventPlayer>();
+            _miniEvent.Play(_session, ev, _overlay.parent, OnPostEventDone);
+        }
+
+        void OnPostEventDone()
+        {
+            if (_miniEvent != null) { Destroy(_miniEvent); _miniEvent = null; }
+            Render(); // stairs reflect the upgraded item (e.g. 弱った馬 → 元気な馬)
+        }
 
         // ---- drive methods (buttons + Editor) ----
 
@@ -107,9 +119,11 @@ namespace Warashibe.Game
         }
 
         // Bun's しつもん nudge string while a question is still available and unused (docs/01 §7).
+        // Requires the NPC to actually have questions (an empty array is not null — e.g. おばあさん).
         string AskNudge()
         {
-            bool canAsk = Npc.Questions != null && _usedQuestions.Count == 0 && _session.QuestionsUsed < 2;
+            bool canAsk = Npc.Questions != null && Npc.Questions.Length > 0
+                          && _usedQuestions.Count < Npc.Questions.Length && _session.QuestionsUsed < 2;
             return canAsk && !_cleared ? Str("tut_ask_bun") : null;
         }
 
@@ -148,7 +162,9 @@ namespace Warashibe.Game
                     _cleared = true;
                     Render();
                     BuildMeter(itemId);               // final state built synchronously (docs/04 §S6)
-                    if (AnimateFx) StartCoroutine(AcceptFx()); // flash + star reveal (docs/04 §4)
+                    var acceptedRule = Npc.Accepts.First(a => a.Item == itemId);
+                    if (AnimateFx) StartCoroutine(AcceptThenPost(acceptedRule)); // flash + stars, then postEvent
+                    else PlayPostEvent(acceptedRule);
                     return;
                 case OfferOutcome.Decline:
                     _dialogue = result.Lines;                    // L{n} decline line
@@ -196,7 +212,12 @@ namespace Warashibe.Game
 
             if (_cleared)
             {
-                RenderStairs(); // value stairs — the visible score proxy (docs/04 §S2)
+                RenderStairs();          // value stairs — the visible score proxy (docs/04 §S2)
+                RenderProceed();         // つぎへ＝ちずへ戻る（docs/01 §1）
+            }
+            else if (!IsTradingStop)
+            {
+                RenderProceed();         // non-trading stop (e.g. おばあさん): intro then move on
             }
             else
             {
@@ -210,6 +231,17 @@ namespace Warashibe.Game
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_column);
             ApplyNudges();
         }
+
+        bool IsTradingStop => Npc.Accepts != null && Npc.Accepts.Length > 0;
+
+        void RenderProceed()
+        {
+            var row = Row("Proceed");
+            Button(row, Str("btn_map"), ButtonVariant.Ai, Leave);
+        }
+
+        // Leave a finished stop → GameFlow unlocks the next stop / shows the result (T-U12).
+        void Leave() => _onCleared?.Invoke();
 
         // ---- tutorial nudges (docs/01 §7: 状況＋明滅＋ぶんの一言, no text panels) ----
 
@@ -254,11 +286,9 @@ namespace Warashibe.Game
 
         void RenderStairs()
         {
-            var owned = new List<string>();
-            foreach (var id in new[] { "item_wara", "item_abumushi_toy", "item_kibidango" })
-                if (_session.Content.Items.TryGetValue(id, out var it)) owned.Add(it.Emoji);
+            var owned = _session.ChainEmojisOwned();   // content-driven chain up to cleared stops (T-U12)
             string goal = _session.Content.Items.TryGetValue(_session.Content.Route.GoalItem, out var g) ? g.Emoji : "🏠";
-            UiKit.StairProgress(_column, owned, 7, goal);
+            UiKit.StairProgress(_column, owned, _session.ChainTotalSteps(), goal);
         }
 
         void RenderActions()
@@ -354,6 +384,7 @@ namespace Warashibe.Game
             }
 
             var canvasGo = new GameObject("GameCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            canvasGo.transform.SetParent(transform, false); // tie the canvas to this screen's lifetime (T-U12)
             var canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = canvasGo.GetComponent<CanvasScaler>();
@@ -405,46 +436,6 @@ namespace Warashibe.Game
             ovV.childForceExpandWidth = true;
             ovV.childAlignment = TextAnchor.MiddleCenter;
             _overlay = ov.transform;
-
-            if (Application.isEditor) BuildDebugStrip(canvas.transform);
-        }
-
-        // ---- editor-only review harness (T-U09) ----
-        // The three mini-events fire from content triggers: tap_catch is the loc_kibitsu ambient
-        // (played on start); horse-care fires on gaining item_uma_weak and boat fires on advancing to
-        // loc_shukuba — neither is reachable until the route walker exists. This top strip lets a
-        // reviewer replay each event now. Editor-only: it never appears in a shipped build.
-
-        void BuildDebugStrip(Transform canvas)
-        {
-            var go = new GameObject("DebugEvents", typeof(RectTransform));
-            go.transform.SetParent(canvas, false);
-            var rt = (RectTransform)go.transform;
-            rt.anchorMin = new Vector2(0.5f, 1f);
-            rt.anchorMax = new Vector2(0.5f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.anchoredPosition = new Vector2(0f, -DesignTokens.Sp1);
-            var h = go.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = DesignTokens.Sp1;
-            h.childControlWidth = h.childControlHeight = true;
-            h.childForceExpandWidth = false;
-            h.childAlignment = TextAnchor.MiddleCenter;
-            go.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            Button(go.transform, "🪰", ButtonVariant.Ghost, () => PlayEvent("ev_abu_catch"));
-            Button(go.transform, "🐴", ButtonVariant.Ghost, () => PlayEvent("ev_horse_care"));
-            Button(go.transform, "🛶", ButtonVariant.Ghost, () => PlayEvent("ev_boat_ride"));
-        }
-
-        /// <summary>Play a content event by id (ambient wiring + editor review). Public so the
-        /// Editor / MCP can drive each mini-event deterministically for capture.</summary>
-        public MiniEventPlayer PlayEvent(string eventId)
-        {
-            if (_miniEvent != null) return _miniEvent; // one at a time
-            if (!_session.Content.Events.TryGetValue(eventId, out var ev)) return null;
-            _miniEvent = gameObject.AddComponent<MiniEventPlayer>();
-            _miniEvent.Play(_session, ev, _overlay.parent, OnAmbientDone);
-            return _miniEvent;
         }
 
         static void Stretch(RectTransform rt)
