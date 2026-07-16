@@ -79,6 +79,9 @@ namespace Warashibe.Game
             _done = true;
             if (_flight != null) StopCoroutine(_flight);
             _session?.ApplyEvent(_event);       // gives / replace_item / advance_to through Core
+            bool gained = !string.IsNullOrEmpty(_event.Gives)
+                          || (_event.OnComplete?.ReplaceItem != null && _event.OnComplete.ReplaceItem.Length == 2);
+            if (gained) AudioManager.Instance.PlaySe("se_get"); // 入手/変化 (docs/04 §5)
             if (_layer != null) Destroy(_layer.gameObject);
             _onComplete?.Invoke();
         }
@@ -158,7 +161,11 @@ namespace Warashibe.Game
                 _pips[i].color = on ? DesignTokens.Shu : DesignTokens.White;
             }
             int need = Mathf.Max(1, _event.Spec != null ? _event.Spec.TapsRequired : 1);
-            if (_taps >= need) ShowResultThenComplete(_event.LinesOnSuccess ?? Array.Empty<string>());
+            if (_taps >= need)
+            {
+                AudioManager.Instance.PlaySe("se_bun"); // アブ捕獲＝ぶん登場 (docs/04 §5)
+                ShowResultThenComplete(_event.LinesOnSuccess ?? Array.Empty<string>());
+            }
         }
 
         // ---- map_choice ----

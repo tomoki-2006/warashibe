@@ -162,11 +162,14 @@ namespace Warashibe.Game
                     _cleared = true;
                     Render();
                     BuildMeter(itemId);               // final state built synchronously (docs/04 §S6)
+                    AudioManager.Instance.PlaySe("se_accept");                              // docs/04 §5
+                    AudioManager.Instance.PlayStair(_session.ChainEmojisOwned().Count - 1); // 1音ずつ上昇
                     var acceptedRule = Npc.Accepts.First(a => a.Item == itemId);
                     if (AnimateFx) StartCoroutine(AcceptThenPost(acceptedRule)); // flash + stars, then postEvent
                     else PlayPostEvent(acceptedRule);
                     return;
                 case OfferOutcome.Decline:
+                    AudioManager.Instance.PlaySe("se_decline");   // docs/04 §5
                     _dialogue = result.Lines;                    // L{n} decline line
                     _bun = result.HintLevelShown >= 3 ? Npc.HintL3
                          : result.HintLevelShown >= 2 ? Npc.HintL2
@@ -189,6 +192,7 @@ namespace Warashibe.Game
                     if (Recipes.Combine(inv[i], inv[j], _session.Content.Recipes) != null)
                     {
                         _session.Combine(inv[i], inv[j]);
+                        AudioManager.Instance.PlaySe("se_get"); // くみあわせ成功 = 入手 (docs/04 §5)
                         _bun = null;
                         _mode = Mode.Idle;
                         Render();
